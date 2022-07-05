@@ -15,5 +15,7 @@
     "strictPropertyInitialization": false,
     "target": "ES2021"
   },
-  "compileOnSave": true
+  "compileOnSave": true,
+  "include": ["src/**/*"],
+  "exclude": ["__tests__"]
 }

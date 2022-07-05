@@ -1,4 +1,6 @@
 import { fastify } from "fastify";
+import { ImportFile } from "./ImportFile";
+import database from "./Database";
 import chokidar from "chokidar";
 const server = fastify({});
 
@@ -19,16 +21,27 @@ const start = async () => {
     console.log("Server started on port 8080");
     console.log(IMPORT_DIR);
 
-    chokidar
+    database.initialize();
+
+    await chokidar
       .watch(IMPORT_DIR, {
         ignored: /(^|[\/\\])\../, // ignore dotfiles
         persistent: true,
       })
       .on("all", (event, path) => {
-        console.log(event, path);
+        if (event == "add") {
+          const file = new ImportFile(path);
+          console.log(event, path);
+
+          console.log(file.isITRFile());
+
+          if (file.isITRFile()) {
+            console.log(`Detected new ITR file at: ${path}`);
+          }
+        }
       });
 
-    chokidar
+    await chokidar
       .watch(EXPORT_DIR, {
         ignored: /(^|[\/\\])\../, // ignore dotfiles
         persistent: true,
