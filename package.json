@@ -1,9 +1,10 @@
 {
   "dependencies": {
+    "chokidar": "^3.5.3",
     "fastify": "^4.1.0"
   },
   "devDependencies": {
-    "@types/node": "^16.15.0"
+    "@types/node": "^16.6.0"
   },
   "scripts": {
     "dev": "nodemon dist/index.js",
