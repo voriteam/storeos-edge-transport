@@ -1,56 +1,36 @@
 import { fastify } from "fastify";
-import { ImportFile } from "./ImportFile";
-import database from "./Database";
-import chokidar from "chokidar";
+
+import { ServerLogger } from "./Logger";
+import { OutboundFileWatcher } from "./FileWatcher";
 const server = fastify({});
+import { datasource } from "./Datasource";
+import { FileUploader } from "./FileUploader";
 
-const port = 8080;
-
-const STORE_ID = "TEST_STORE_ID";
+/*
+ * ENVIRONMENT/CONFIGURATION VARIABLES
+ */
+const PORT = 8080;
 
 // TODO point this at the right ITRetail directories
-// IMPORT/EXPORT is relative to Vori, not ITRetail
-const IMPORT_DIR = __dirname + "/../itretail_import";
-const EXPORT_DIR = __dirname + "/../itretail_export";
 
 const start = async () => {
   try {
     await server.listen({
-      port: 8080,
+      port: PORT,
     });
-    console.log("Server started on port 8080");
-    console.log(IMPORT_DIR);
 
-    database.initialize();
+    const conn = await datasource.initialize();
+    ServerLogger.info(`Initialized db connection`);
 
-    await chokidar
-      .watch(IMPORT_DIR, {
-        ignored: /(^|[\/\\])\../, // ignore dotfiles
-        persistent: true,
-      })
-      .on("all", (event, path) => {
-        if (event == "add") {
-          const file = new ImportFile(path);
-          console.log(event, path);
+    ServerLogger.info("Server started on port 8080");
 
-          console.log(file.isITRFile());
+    const watcher = new OutboundFileWatcher();
+    watcher.watch();
 
-          if (file.isITRFile()) {
-            console.log(`Detected new ITR file at: ${path}`);
-          }
-        }
-      });
-
-    await chokidar
-      .watch(EXPORT_DIR, {
-        ignored: /(^|[\/\\])\../, // ignore dotfiles
-        persistent: true,
-      })
-      .on("all", (event, path) => {
-        console.log(event, path);
-      });
+    const uploader = new FileUploader();
+    uploader.scheduleUpload();
   } catch (err) {
-    console.error(err);
+    ServerLogger.error(`Server failed to start: ${err}`);
     process.exit(1);
   }
 };

@@ -60,3 +60,5 @@ profile*
 itretail_import
 itretail_export
 itretail-sync
+itretail_sql
+itr_sql
