@@ -3,12 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FileUploader = void 0;
+exports.FileDownloader = void 0;
 const node_cron_1 = __importDefault(require("node-cron"));
-const ssh2_sftp_client_1 = __importDefault(require("ssh2-sftp-client"));
 const Config_1 = require("./Config");
+const ssh2_sftp_client_1 = __importDefault(require("ssh2-sftp-client"));
+const Datasource_1 = require("./Datasource");
+const ITRetailOutboundFile_1 = require("./ITRetailOutboundFile");
 const Logger_1 = require("./Logger");
-class FileUploader {
+class FileDownloader {
     constructor() {
         this.isUploadJobRunning = false;
     }
@@ -23,13 +25,24 @@ class FileUploader {
             }
             this.isUploadJobRunning = true;
             Logger_1.FileUploaderLogger.info(`Initiating upload to SFTP`);
+            const [files, count] = await Datasource_1.datasource
+                .getRepository(ITRetailOutboundFile_1.ITRetailOutboundFile)
+                .findAndCountBy({
+                status: "PENDING",
+            });
+            Logger_1.FileUploaderLogger.info(`Uploading ${count} files...`);
+            for (const file of files) {
+                Logger_1.FileUploaderLogger.info(`Uploading ${file.fileName}`);
+                await this.uploadFile(file);
+                file.status = "SENT";
+                await Datasource_1.datasource.getRepository(ITRetailOutboundFile_1.ITRetailOutboundFile).save(file);
+            }
             this.isUploadJobRunning = false;
         });
     }
-    async listFiles() {
+    async uploadFile(file) {
+        const config = (0, Config_1.getConfig)();
         return new Promise((resolve, reject) => {
-            let files = [];
-            const config = (0, Config_1.getConfig)();
             const sftp = new ssh2_sftp_client_1.default();
             sftp
                 .connect({
@@ -38,35 +51,7 @@ class FileUploader {
                 password: config.sftp.sftpPassword,
             })
                 .then(() => {
-                return sftp.list(config.itrInboundPath);
-            })
-                .then((data) => {
-                console.log(data);
-                files = data;
-                // FileUploaderLogger.info(data);
-            })
-                .then(() => {
-                sftp.end();
-                resolve(files);
-            })
-                .catch((err) => {
-                Logger_1.FileUploaderLogger.error(`Error uploading file: ${err}`);
-                reject(err);
-            });
-        });
-    }
-    async downloadFile(file) {
-        return new Promise((resolve, reject) => {
-            const config = (0, Config_1.getConfig)();
-            const sftp = new ssh2_sftp_client_1.default();
-            sftp
-                .connect({
-                host: config.sftp.host,
-                username: config.sftp.sftpUser,
-                password: config.sftp.sftpPassword,
-            })
-                .then(() => {
-                return sftp.fastGet("", "");
+                return sftp.fastPut(file.filePath, `/remote-dir/${file.fileName}`);
             })
                 .then((data) => {
                 Logger_1.FileUploaderLogger.info(data);
@@ -82,5 +67,5 @@ class FileUploader {
         });
     }
 }
-exports.FileUploader = FileUploader;
-//# sourceMappingURL=FileUploader.js.map
+exports.FileDownloader = FileDownloader;
+//# sourceMappingURL=FileDownloader.js.map

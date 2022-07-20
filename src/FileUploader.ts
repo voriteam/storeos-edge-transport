@@ -1,21 +1,11 @@
 import cron from "node-cron";
 
-import Client from "ssh2-sftp-client";
+import Client, { FileInfo } from "ssh2-sftp-client";
+import { getConfig } from "./Config";
+import { ITRetailInboundFile } from "./ITRetailInboundFile";
 
-import { datasource } from "./Datasource";
 import { ITRetailOutboundFile } from "./ITRetailOutboundFile";
 import { FileUploaderLogger } from "./Logger";
-
-const SFTPCredentials = {
-  username: process.env.SFTP_USERNAME,
-  password: process.env.SFTP_PASSWORD,
-};
-
-const credentials = {
-  host: "data.sftp.us.stedi.com",
-  username: SFTPCredentials.username,
-  password: SFTPCredentials.password,
-};
 
 export class FileUploader {
   isUploadJobRunning: boolean = false;
@@ -34,32 +24,52 @@ export class FileUploader {
       this.isUploadJobRunning = true;
       FileUploaderLogger.info(`Initiating upload to SFTP`);
 
-      const [files, count] = await datasource
-        .getRepository(ITRetailOutboundFile)
-        .findAndCountBy({
-          status: "PENDING",
-        });
-
-      FileUploaderLogger.info(`Uploading ${count} files...`);
-
-      for (const file of files) {
-        FileUploaderLogger.info(`Uploading ${file.fileName}`);
-        await this.uploadFile(file);
-
-        file.status = "SENT";
-        await datasource.getRepository(ITRetailOutboundFile).save(file);
-      }
       this.isUploadJobRunning = false;
     });
   }
 
-  async uploadFile(file: ITRetailOutboundFile): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+  async listFiles(): Promise<FileInfo[]> {
+    return new Promise<FileInfo[]>((resolve, reject) => {
+      let files: FileInfo[] = [];
+      const config = getConfig();
       const sftp = new Client();
       sftp
-        .connect(credentials)
+        .connect({
+          host: config.sftp.host,
+          username: config.sftp.sftpUser,
+          password: config.sftp.sftpPassword,
+        })
         .then(() => {
-          return sftp.fastPut(file.filePath, `/remote-dir/${file.fileName}`);
+          return sftp.list(config.itrInboundPath);
+        })
+        .then((data) => {
+          console.log(data);
+          files = data;
+          // FileUploaderLogger.info(data);
+        })
+        .then(() => {
+          sftp.end();
+          resolve(files);
+        })
+        .catch((err) => {
+          FileUploaderLogger.error(`Error uploading file: ${err}`);
+          reject(err);
+        });
+    });
+  }
+
+  async downloadFile(file: ITRetailInboundFile): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const config = getConfig();
+      const sftp = new Client();
+      sftp
+        .connect({
+          host: config.sftp.host,
+          username: config.sftp.sftpUser,
+          password: config.sftp.sftpPassword,
+        })
+        .then(() => {
+          return sftp.fastGet("", "");
         })
         .then((data) => {
           FileUploaderLogger.info(data);
